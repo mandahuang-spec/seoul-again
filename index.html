@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Seoul Trip 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #FFF5F7; overflow-x: hidden; }
+        .bg-cherry { background-color: #FFB7C5; }
+        .text-cherry { color: #FFB7C5; }
+        .header-banner { height: 200px; background: linear-gradient(180deg, #FFD1DC 0%, #FFB7C5 100%); position: relative; }
+        .header-curve { position: absolute; bottom: 0; width: 100%; height: 40px; background: #FFF5F7; border-radius: 40px 40px 0 0; }
+        .main-content { margin-top: -30px; position: relative; z-index: 10; }
+        .active-date { background-color: #FFB7C5; color: white; transform: scale(1.05); }
+        .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.5); }
+        input, select, textarea { width: 100%; background-color: #FDF2F4; border: 1px solid #FFD1DC; border-radius: 16px; padding: 12px 16px; outline: none; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <div id="app" class="max-w-md mx-auto min-h-screen pb-24">
+        
+        <header class="header-banner flex items-center justify-center">
+            <h1 class="text-3xl font-bold text-white tracking-widest">Seoul Trip</h1>
+            <nav class="absolute bottom-6 right-4 flex space-x-2 z-20">
+                <button v-for="t in tabs" @click="activeTab = t.id" :class="['p-3 rounded-2xl glass-card transition-all', activeTab === t.id ? 'bg-cherry text-white' : 'text-cherry']">
+                    <i :data-lucide="t.icon" class="w-5 h-5"></i>
+                </button>
+            </nav>
+            <div class="header-curve"></div>
+        </header>
+
+        <main class="main-content px-5">
+            <div v-if="activeTab === 'itinerary'">
+                <div class="flex overflow-x-auto space-x-3 py-2 mb-4 no-scrollbar">
+                    <button v-for="d in tripDays" @click="selectedDay = d.id" :class="['flex-shrink-0 w-14 h-16 rounded-2xl flex flex-col items-center justify-center bg-white text-gray-300 shadow-sm transition-all', selectedDay === d.id ? 'active-date' : '']">
+                        <span class="text-[10px] font-bold">{{ d.weekday }}</span>
+                        <span class="text-lg font-bold">{{ d.date.split('/')[1] }}</span>
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <div v-for="item in filteredSchedule" :key="item.id" @click="openNaver(item.name)" class="bg-white p-4 rounded-3xl border-l-8 border-cherry shadow-sm flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center space-x-2 mb-1">
+                                <span class="text-[9px] bg-pink-50 text-cherry px-2 py-0.5 rounded-md font-bold">{{ item.category }}</span>
+                                <span class="text-[10px] text-gray-400">🕒 {{ item.time }}</span>
+                            </div>
+                            <h3 class="font-bold text-gray-700">{{ item.name }}</h3>
+                            <p v-if="item.note" class="text-[11px] text-gray-400 mt-1 italic">{{ item.note }}</p>
+                        </div>
+                        <button @click.stop="removeItem('schedule', item.id)" class="text-gray-200 hover:text-red-300 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="activeTab === 'info'" class="space-y-4">
+                <div class="bg-white p-6 rounded-3xl shadow-sm">
+                    <h3 class="font-bold text-gray-700 mb-4">匯率計算器</h3>
+                    <input type="number" v-model="krwInput" placeholder="輸入韓幣 KRW">
+                    <div class="text-center font-bold text-cherry text-2xl">≈ NT$ {{ (krwInput * 0.024).toFixed(0) }}</div>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm">
+                    <h3 class="font-bold text-gray-700 mb-2">住宿飯店</h3>
+                    <p class="text-xs text-gray-400 mb-4">Hotel 27, Seoul</p>
+                    <button @click="openNaver('Hotel 27 Seoul')" class="w-full bg-cherry text-white py-3 rounded-2xl font-bold">開啟 Naver Map 導航</button>
+                </div>
+            </div>
+
+            <div v-if="activeTab === 'shopping'" class="grid grid-cols-2 gap-3">
+                <div v-for="s in shoppingList" :key="s.id" class="bg-white p-4 rounded-3xl shadow-sm text-center relative">
+                    <p class="text-sm font-bold text-gray-700">{{ s.name }}</p>
+                    <button @click="removeItem('shopping', s.id)" class="absolute top-2 right-2 text-gray-200"><i data-lucide="x" class="w-3 h-3"></i></button>
+                </div>
+            </div>
+
+            <div v-if="activeTab === 'expense'" class="space-y-3">
+                <div class="bg-cherry p-6 rounded-[32px] text-white shadow-lg mb-4 text-center">
+                    <p class="text-xs opacity-80">總支出總計</p>
+                    <h2 class="text-3xl font-black">₩ {{ totalExpense.toLocaleString() }}</h2>
+                </div>
+                <div v-for="e in expenseList" :key="e.id" class="bg-white p-4 rounded-3xl flex justify-between items-center shadow-sm">
+                    <div>
+                        <p class="text-sm font-bold text-gray-700">{{ e.name }}</p>
+                        <p class="text-[10px] text-gray-300">{{ e.category }} · {{ e.payment }}</p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span class="font-bold text-gray-600">₩{{ e.amount }}</span>
+                        <button @click="removeItem('expense', e.id)" class="text-gray-200"><i data-lucide="minus-circle" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <button @click="showModal = true" class="fixed bottom-8 right-6 w-16 h-16 bg-cherry text-white rounded-full shadow-2xl flex items-center justify-center z-50 active:scale-90 transition-transform">
+            <i data-lucide="plus" class="w-8 h-8"></i>
+        </button>
+
+        <div v-if="showModal" class="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 backdrop-blur-sm p-4" @click.self="showModal = false">
+            <div class="bg-white w-full max-w-md rounded-[40px] p-8 animate-slide-up shadow-2xl">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">新增到 {{ currentTabName }}</h2>
+                
+                <div v-if="activeTab === 'itinerary'">
+                    <select v-model="form.category">
+                        <option>景點</option><option>美食</option><option>購物</option><option>住宿</option><option>航班</option>
+                    </select>
+                    <input v-model="form.name" placeholder="名稱 (例如: 聖水洞排骨湯)">
+                    <input v-model="form.time" placeholder="時間 (例如: 14:30)">
+                    <textarea v-model="form.note" placeholder="備註"></textarea>
+                </div>
+
+                <div v-if="activeTab === 'shopping'">
+                    <input v-model="form.name" placeholder="想買的商品名稱">
+                </div>
+
+                <div v-if="activeTab === 'expense'">
+                    <input v-model="form.name" placeholder="花費項目">
+                    <input type="number" v-model="form.amount" placeholder="金額 (韓幣)">
+                    <select v-model="form.payment"><option>現金</option><option>信用卡</option></select>
+                </div>
+
+                <button @click="saveData" class="w-full bg-cherry text-white py-4 rounded-2xl font-bold shadow-lg mt-2">確認儲存</button>
+                <button @click="showModal = false" class="w-full py-3 text-gray-400 text-sm mt-2">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+
+        createApp({
+            setup() {
+                const activeTab = ref('itinerary');
+                const selectedDay = ref(1);
+                const krwInput = ref(0);
+                const showModal = ref(false);
+
+                const tabs = [
+                    { id: 'itinerary', icon: 'map-pin' },
+                    { id: 'info', icon: 'info' },
+                    { id: 'shopping', icon: 'shopping-basket' },
+                    { id: 'expense', icon: 'banknote' }
+                ];
+
+                const tripDays = [
+                    { id: 1, weekday: 'Sat', date: '4/4' }, { id: 2, weekday: 'Sun', date: '4/5' },
+                    { id: 3, weekday: 'Mon', date: '4/6' }, { id: 4, weekday: 'Tue', date: '4/7' },
+                    { id: 5, weekday: 'Wed', date: '4/8' }, { id: 6, weekday: 'Thu', date: '4/9' },
+                    { id: 7, weekday: 'Fri', date: '4/10' }
+                ];
+
+                // 從 LocalStorage 載入資料，若無則提供初始行程
+                const schedule = ref(JSON.parse(localStorage.getItem('trip_schedule')) || [
+                    { id: 1, dayId: 1, category: '航班', name: 'BR146 長榮航空', time: '06:55', note: '抵達仁川 T1' }
+                ]);
+                const shoppingList = ref(JSON.parse(localStorage.getItem('trip_shopping')) || []);
+                const expenseList = ref(JSON.parse(localStorage.getItem('trip_expense')) || []);
+
+                const form = ref({ category: '景點', name: '', time: '', note: '', amount: '', payment: '現金' });
+
+                const filteredSchedule = computed(() => schedule.value.filter(s => s.dayId === selectedDay.value));
+                const currentTabName = computed(() => tabs.find(t => t.id === activeTab.value).id);
+                const totalExpense = computed(() => expenseList.value.reduce((sum, e) => sum + Number(e.amount), 0));
+
+                const saveData = () => {
+                    if (!form.value.name) return alert('請輸入名稱');
+                    
+                    const newId = Date.now();
+                    if (activeTab.value === 'itinerary') {
+                        schedule.value.push({ ...form.value, id: newId, dayId: selectedDay.value });
+                        localStorage.setItem('trip_schedule', JSON.stringify(schedule.value));
+                    } else if (activeTab.value === 'shopping') {
+                        shoppingList.value.push({ id: newId, name: form.value.name });
+                        localStorage.setItem('trip_shopping', JSON.stringify(shoppingList.value));
+                    } else if (activeTab.value === 'expense') {
+                        expenseList.value.push({ id: newId, ...form.value });
+                        localStorage.setItem('trip_expense', JSON.stringify(expenseList.value));
+                    }
+                    
+                    showModal.value = false;
+                    resetForm();
+                    nextTick(() => lucide.createIcons());
+                };
+
+                const removeItem = (type, id) => {
+                    if (!confirm('確定要刪除嗎？')) return;
+                    if (type === 'schedule') schedule.value = schedule.value.filter(i => i.id !== id);
+                    if (type === 'shopping') shoppingList.value = shoppingList.value.filter(i => i.id !== id);
+                    if (type === 'expense') expenseList.value = expenseList.value.filter(i => i.id !== id);
+                    
+                    localStorage.setItem('trip_schedule', JSON.stringify(schedule.value));
+                    localStorage.setItem('trip_shopping', JSON.stringify(shoppingList.value));
+                    localStorage.setItem('trip_expense', JSON.stringify(expenseList.value));
+                    nextTick(() => lucide.createIcons());
+                };
+
+                const resetForm = () => {
+                    form.value = { category: '景點', name: '', time: '', note: '', amount: '', payment: '現金' };
+                };
+
+                const openNaver = (q) => window.open(`https://map.naver.com/v5/search/${encodeURIComponent(q)}`, '_blank');
+
+                onMounted(() => {
+                    lucide.createIcons();
+                });
+
+                watch(activeTab, () => nextTick(() => lucide.createIcons()));
+
+                return {
+                    activeTab, selectedDay, tripDays, filteredSchedule, krwInput, 
+                    tabs, showModal, form, saveData, currentTabName, shoppingList, 
+                    expenseList, totalExpense, openNaver, removeItem
+                };
+            }
+        }).mount('#app');
+    </script>
+    <style>
+        @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .animate-slide-up { animation: slide-up 0.3s ease-out; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</body>
+</html>
